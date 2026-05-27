@@ -1,4 +1,7 @@
+import os
+import sys
 from PyQt5.QtWidgets import QMainWindow, QTabWidget, QWidget, QVBoxLayout, QLabel
+from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt
 from .search_tab import SearchTab
 from .settings_tab import SettingsTab, load_config
@@ -36,8 +39,18 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1000, 650)
         self.resize(1200, 750)
         self.setStyleSheet(STYLESHEET)
+        self._set_icon()
         self._init_ui()
         self._apply_config()
+
+    def _set_icon(self):
+        if getattr(sys, 'frozen', False):
+            base = os.path.dirname(sys.executable)
+        else:
+            base = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        icon_path = os.path.join(base, "app_icon.png")
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
 
     def _init_ui(self):
         central = QWidget()

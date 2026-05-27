@@ -1,13 +1,20 @@
 import os
+import sys
 from datetime import datetime
 from typing import List
 from ..models.repo import Repository
 
 
+def get_app_dir() -> str:
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
 class ExportService:
     def __init__(self, output_dir: str = None):
         if output_dir is None:
-            output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "output")
+            output_dir = os.path.join(get_app_dir(), "output")
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
 
