@@ -9,8 +9,10 @@ def get_base_path():
 
 
 if __name__ == "__main__":
-    if getattr(sys, 'frozen', False):
-        os.chdir(get_base_path())
+    base = get_base_path()
+    os.chdir(base)
+    if base not in sys.path:
+        sys.path.insert(0, base)
 
     from src.app import run
     run()
