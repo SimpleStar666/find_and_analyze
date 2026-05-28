@@ -88,6 +88,14 @@ class SearchTab(QWidget):
         layout.setSpacing(10)
 
         search_bar = QHBoxLayout()
+
+        self.select_all_cb = QCheckBox("全选")
+        self.select_all_cb.setStyleSheet("font-size: 12px; color: #2c3e50; padding: 0px 4px;")
+        self.select_all_cb.stateChanged.connect(self._on_select_all_changed)
+
+        self.selected_count_label = QLabel("0")
+        self.selected_count_label.setStyleSheet("color: #7f8c8d; font-size: 11px; padding: 0px 2px;")
+
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("输入关键词搜索 GitHub 仓库（如：machine learning, web framework）...")
         self.search_input.setStyleSheet("""
@@ -134,19 +142,9 @@ class SearchTab(QWidget):
         """)
         self.search_btn.clicked.connect(self._do_search)
         search_bar.addWidget(self.search_btn)
+        search_bar.addWidget(self.select_all_cb)
+        search_bar.addWidget(self.selected_count_label)
         layout.addLayout(search_bar)
-
-        select_bar = QHBoxLayout()
-        self.select_all_cb = QCheckBox("全选")
-        self.select_all_cb.setStyleSheet("font-size: 13px; font-weight: bold; color: #2c3e50;")
-        self.select_all_cb.stateChanged.connect(self._on_select_all_changed)
-        select_bar.addWidget(self.select_all_cb)
-
-        self.selected_count_label = QLabel("已选 0 项")
-        self.selected_count_label.setStyleSheet("color: #7f8c8d; font-size: 12px;")
-        select_bar.addWidget(self.selected_count_label)
-        select_bar.addStretch()
-        layout.addLayout(select_bar)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 0)
@@ -269,7 +267,7 @@ class SearchTab(QWidget):
 
     def _update_selected_count(self):
         count = len(self._get_selected_repos())
-        self.selected_count_label.setText(f"已选 {count} 项")
+        self.selected_count_label.setText(f"({count})")
         self.summarize_selected_btn.setEnabled(count > 0)
 
     def _on_select_all_changed(self, state):
