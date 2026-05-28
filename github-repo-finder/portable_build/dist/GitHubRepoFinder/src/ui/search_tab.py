@@ -1,7 +1,7 @@
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton,
     QListWidget, QListWidgetItem, QLabel, QTextBrowser, QSplitter,
-    QMessageBox, QProgressBar
+    QMessageBox, QProgressBar, QComboBox, QCheckBox
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from ..models.repo import Repository
@@ -11,18 +11,33 @@ from ..services.export_service import ExportService
 from ..ui.settings_tab import load_config
 
 
+SORT_OPTIONS = {
+    "最佳匹配": "best-match",
+    "最多 Star": "stars",
+    "最多 Fork": "forks",
+    "最近更新": "updated",
+}
+
+ORDER_OPTIONS = {
+    "降序": "desc",
+    "升序": "asc",
+}
+
+
 class SearchWorker(QThread):
     result_ready = pyqtSignal(list)
     error_occurred = pyqtSignal(str)
 
-    def __init__(self, github_service: GitHubService, query: str):
+    def __init__(self, github_service: GitHubService, query: str, sort: str = "stars", order: str = "desc"):
         super().__init__()
         self.github_service = github_service
         self.query = query
+        self.sort = sort
+        self.order = order
 
     def run(self):
         try:
-            repos = self.github_service.search_repositories(self.query)
+            repos = self.github_service.search_repositories(self.query, sort=self.sort, order=self.order)
             self.result_ready.emit(repos)
         except GitHubServiceError as e:
             self.error_occurred.emit(str(e))
@@ -83,7 +98,27 @@ class SearchTab(QWidget):
             QLineEdit:focus { border-color: #3498db; }
         """)
         self.search_input.returnPressed.connect(self._do_search)
-        search_bar.addWidget(self.search_input)
+        search_bar.addWidget(self.search_input, stretch=3)
+
+        self.sort_combo = QComboBox()
+        self.sort_combo.addItems(SORT_OPTIONS.keys())
+        self.sort_combo.setCurrentText("最多 Star")
+        self.sort_combo.setStyleSheet("""
+            QComboBox {
+                padding: 8px 12px; font-size: 13px;
+                border: 2px solid #bdc3c7; border-radius: 6px;
+                min-width: 100px;
+            }
+            QComboBox:hover { border-color: #3498db; }
+            QComboBox::drop-down { border: none; }
+        """)
+        search_bar.addWidget(self.sort_combo)
+
+        self.order_combo = QComboBox()
+        self.order_combo.addItems(ORDER_OPTIONS.keys())
+        self.order_combo.setCurrentText("降序")
+        self.order_combo.setStyleSheet(self.sort_combo.styleSheet())
+        search_bar.addWidget(self.order_combo)
 
         self.search_btn = QPushButton("🔍 搜索")
         self.search_btn.setStyleSheet("""
@@ -100,6 +135,18 @@ class SearchTab(QWidget):
         self.search_btn.clicked.connect(self._do_search)
         search_bar.addWidget(self.search_btn)
         layout.addLayout(search_bar)
+
+        select_bar = QHBoxLayout()
+        self.select_all_cb = QCheckBox("全选")
+        self.select_all_cb.setStyleSheet("font-size: 13px; font-weight: bold; color: #2c3e50;")
+        self.select_all_cb.stateChanged.connect(self._on_select_all_changed)
+        select_bar.addWidget(self.select_all_cb)
+
+        self.selected_count_label = QLabel("已选 0 项")
+        self.selected_count_label.setStyleSheet("color: #7f8c8d; font-size: 12px;")
+        select_bar.addWidget(self.selected_count_label)
+        select_bar.addStretch()
+        layout.addLayout(select_bar)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 0)
@@ -129,6 +176,7 @@ class SearchTab(QWidget):
             }
         """)
         self.repo_list.currentItemChanged.connect(self._on_repo_selected)
+        self.repo_list.itemChanged.connect(self._on_item_changed)
         splitter.addWidget(self.repo_list)
 
         detail_widget = QWidget()
@@ -157,7 +205,7 @@ class SearchTab(QWidget):
         detail_layout.addWidget(self.detail_browser)
 
         action_bar = QHBoxLayout()
-        self.summarize_btn = QPushButton("🤖 AI 总结")
+        self.summarize_btn = QPushButton("🤖 总结当前")
         self.summarize_btn.setEnabled(False)
         self.summarize_btn.setStyleSheet("""
             QPushButton {
@@ -172,9 +220,9 @@ class SearchTab(QWidget):
         self.summarize_btn.clicked.connect(self._do_summarize)
         action_bar.addWidget(self.summarize_btn)
 
-        self.summarize_all_btn = QPushButton("🤖 批量总结所有")
-        self.summarize_all_btn.setEnabled(False)
-        self.summarize_all_btn.setStyleSheet("""
+        self.summarize_selected_btn = QPushButton("🤖 总结选中")
+        self.summarize_selected_btn.setEnabled(False)
+        self.summarize_selected_btn.setStyleSheet("""
             QPushButton {
                 background-color: #e67e22; color: white;
                 border: none; border-radius: 6px;
@@ -184,8 +232,8 @@ class SearchTab(QWidget):
             QPushButton:pressed { background-color: #ba4a00; }
             QPushButton:disabled { background-color: #95a5a6; }
         """)
-        self.summarize_all_btn.clicked.connect(self._do_summarize_all)
-        action_bar.addWidget(self.summarize_all_btn)
+        self.summarize_selected_btn.clicked.connect(self._do_summarize_selected)
+        action_bar.addWidget(self.summarize_selected_btn)
 
         self.export_btn = QPushButton("📄 导出 Markdown")
         self.export_btn.setEnabled(False)
@@ -209,6 +257,42 @@ class SearchTab(QWidget):
         splitter.setSizes([300, 500])
         layout.addWidget(splitter)
 
+    def _get_selected_repos(self) -> list:
+        selected = []
+        for i in range(self.repo_list.count()):
+            item = self.repo_list.item(i)
+            if item.checkState() == Qt.Checked:
+                repo = item.data(Qt.UserRole)
+                if repo:
+                    selected.append(repo)
+        return selected
+
+    def _update_selected_count(self):
+        count = len(self._get_selected_repos())
+        self.selected_count_label.setText(f"已选 {count} 项")
+        self.summarize_selected_btn.setEnabled(count > 0)
+
+    def _on_select_all_changed(self, state):
+        check_state = Qt.Checked if state == Qt.Checked else Qt.Unchecked
+        self.repo_list.blockSignals(True)
+        for i in range(self.repo_list.count()):
+            self.repo_list.item(i).setCheckState(check_state)
+        self.repo_list.blockSignals(False)
+        self._update_selected_count()
+
+    def _on_item_changed(self, item: QListWidgetItem):
+        self._update_selected_count()
+        checked_count = len(self._get_selected_repos())
+        total_count = self.repo_list.count()
+        self.select_all_cb.blockSignals(True)
+        if checked_count == 0:
+            self.select_all_cb.setCheckState(Qt.Unchecked)
+        elif checked_count == total_count:
+            self.select_all_cb.setCheckState(Qt.Checked)
+        else:
+            self.select_all_cb.setCheckState(Qt.PartiallyChecked)
+        self.select_all_cb.blockSignals(False)
+
     def update_config(self, config: dict):
         self.github_service = GitHubService(token=config.get("github_token") or None)
         if config.get("api_key") and config.get("api_base") and config.get("model"):
@@ -227,6 +311,9 @@ class SearchTab(QWidget):
         config = load_config()
         self.github_service = GitHubService(token=config.get("github_token") or None)
 
+        sort_key = SORT_OPTIONS[self.sort_combo.currentText()]
+        order_key = ORDER_OPTIONS[self.order_combo.currentText()]
+
         self.search_btn.setEnabled(False)
         self.progress_bar.setVisible(True)
         self.repo_list.clear()
@@ -234,8 +321,9 @@ class SearchTab(QWidget):
         self.detail_header.setText("搜索中...")
         self.meta_label.setText("")
         self.repos = []
+        self.select_all_cb.setChecked(False)
 
-        self._search_worker = SearchWorker(self.github_service, query)
+        self._search_worker = SearchWorker(self.github_service, query, sort=sort_key, order=order_key)
         self._search_worker.result_ready.connect(self._on_search_done)
         self._search_worker.error_occurred.connect(self._on_search_error)
         self._search_worker.start()
@@ -244,18 +332,19 @@ class SearchTab(QWidget):
         self.repos = repos
         self.search_btn.setEnabled(True)
         self.progress_bar.setVisible(False)
-        self.summarize_all_btn.setEnabled(len(repos) > 0)
         self.export_btn.setEnabled(len(repos) > 0)
 
         if not repos:
             self.detail_header.setText("未找到相关仓库，请尝试其他关键词")
             return
 
-        self.detail_header.setText(f"找到 {len(repos)} 个仓库，点击查看详情")
+        self.detail_header.setText(f"找到 {len(repos)} 个仓库，勾选后可批量总结")
 
         for repo in repos:
             item = QListWidgetItem()
             item.setData(Qt.UserRole, repo)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Unchecked)
             stars = repo.stargazers_count
             lang = repo.language or "未知"
             item.setText(f"⭐ {stars:>6}  [{lang}]  {repo.full_name}")
@@ -290,7 +379,7 @@ class SearchTab(QWidget):
         if repo.ai_summary:
             html += f"<hr><h3>🤖 AI 总结</h3><div style='white-space: pre-wrap;'>{repo.ai_summary}</div>"
         else:
-            html += "<p style='color: #95a5a6;'>点击「AI 总结」按钮生成智能总结</p>"
+            html += "<p style='color: #95a5a6;'>点击「总结当前」按钮生成智能总结</p>"
         self.detail_browser.setHtml(html)
 
         self._readme_worker = ReadmeWorker(self.github_service, repo.full_name)
@@ -345,8 +434,10 @@ class SearchTab(QWidget):
             self.detail_header.setText(f"📦 {self.current_repo.full_name}")
         QMessageBox.critical(self, "总结失败", error_msg)
 
-    def _do_summarize_all(self):
-        if not self.repos:
+    def _do_summarize_selected(self):
+        selected = self._get_selected_repos()
+        if not selected:
+            QMessageBox.warning(self, "提示", "请先勾选要总结的仓库！")
             return
         config = load_config()
         if not config.get("api_key") or not config.get("api_base") or not config.get("model"):
@@ -358,17 +449,24 @@ class SearchTab(QWidget):
             model=config["model"],
         )
 
-        self.summarize_all_btn.setEnabled(False)
+        self.summarize_selected_btn.setEnabled(False)
         self.summarize_btn.setEnabled(False)
         self.search_btn.setEnabled(False)
         self.progress_bar.setVisible(True)
-        self._summarize_queue = [r for r in self.repos if not r.ai_summary]
+        self._summarize_queue = [r for r in selected if not r.ai_summary]
+        if not self._summarize_queue:
+            self.summarize_selected_btn.setEnabled(True)
+            self.summarize_btn.setEnabled(True)
+            self.search_btn.setEnabled(True)
+            self.progress_bar.setVisible(False)
+            self.detail_header.setText("选中的仓库已全部总结过")
+            return
         self._summarize_index = 0
         self._summarize_next()
 
     def _summarize_next(self):
         if self._summarize_index >= len(self._summarize_queue):
-            self.summarize_all_btn.setEnabled(True)
+            self.summarize_selected_btn.setEnabled(True)
             self.summarize_btn.setEnabled(True)
             self.search_btn.setEnabled(True)
             self.progress_bar.setVisible(False)
