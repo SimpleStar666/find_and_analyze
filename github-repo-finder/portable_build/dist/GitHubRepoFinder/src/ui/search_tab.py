@@ -144,16 +144,17 @@ class SearchTab(QWidget):
         search_bar.addWidget(self.search_btn)
         search_bar.addWidget(self.select_all_cb)
         search_bar.addWidget(self.selected_count_label)
-        layout.addLayout(search_bar)
+        layout.addLayout(search_bar, 0)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 0)
         self.progress_bar.setVisible(False)
+        self.progress_bar.setFixedHeight(6)
         self.progress_bar.setStyleSheet("""
-            QProgressBar { border: none; border-radius: 4px; background-color: #ecf0f1; height: 6px; }
+            QProgressBar { border: none; border-radius: 4px; background-color: #ecf0f1; }
             QProgressBar::chunk { background-color: #3498db; border-radius: 4px; }
         """)
-        layout.addWidget(self.progress_bar)
+        layout.addWidget(self.progress_bar, 0)
 
         splitter = QSplitter(Qt.Horizontal)
 
@@ -253,7 +254,7 @@ class SearchTab(QWidget):
 
         splitter.addWidget(detail_widget)
         splitter.setSizes([300, 500])
-        layout.addWidget(splitter)
+        layout.addWidget(splitter, 1)
 
     def _get_selected_repos(self) -> list:
         selected = []
