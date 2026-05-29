@@ -1,3 +1,4 @@
+import re
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton,
     QListWidget, QListWidgetItem, QLabel, QTextBrowser, QSplitter,
@@ -195,6 +196,20 @@ class SearchTab(QWidget):
         self.meta_label.setStyleSheet("color: #7f8c8d; font-size: 12px;")
         self.meta_label.setWordWrap(True)
         detail_layout.addWidget(self.meta_label)
+
+        self.copy_url_btn = QPushButton("📋 复制链接")
+        self.copy_url_btn.setFixedHeight(28)
+        self.copy_url_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #ecf0f1; color: #2c3e50;
+                border: 1px solid #bdc3c7; border-radius: 4px;
+                padding: 4px 10px; font-size: 12px;
+            }
+            QPushButton:hover { background-color: #d5dbdb; }
+        """)
+        self.copy_url_btn.clicked.connect(self._copy_repo_url)
+        self.copy_url_btn.setVisible(False)
+        detail_layout.addWidget(self.copy_url_btn)
 
         self.detail_browser = QTextBrowser()
         self.detail_browser.setStyleSheet("""
@@ -406,11 +421,12 @@ class SearchTab(QWidget):
             f"⭐ {repo.stargazers_count}",
             f"🍴 {repo.forks_count}",
             f"💻 {repo.language or '未知'}",
-            f"🔗 <a href='{repo.html_url}'>{repo.html_url}</a>",
+            f"🔗 {repo.html_url}",
         ]
         if repo.topics:
             meta_parts.append(f"🏷 {', '.join(repo.topics)}")
         self.meta_label.setText("  |  ".join(meta_parts))
+        self.copy_url_btn.setVisible(True)
 
         html = f"<p><b>简介：</b>{repo.description or '暂无描述'}</p>"
         if repo.ai_summary:
@@ -427,10 +443,34 @@ class SearchTab(QWidget):
         if self.current_repo and self.current_repo.full_name == full_name:
             self.current_repo.readme_content = readme
             if readme:
-                escaped = readme.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                readme_html = self._simple_markdown_to_html(readme[:8000])
                 current_html = self.detail_browser.toHtml()
-                readme_section = f"<hr><h3>📖 README</h3><pre style='white-space: pre-wrap; font-size: 12px; max-height: 300px; overflow-y: auto;'>{escaped[:5000]}</pre>"
+                readme_section = f"<hr><h3>📖 README</h3><div style='font-size: 14px; max-height: 400px; overflow-y: auto;'>{readme_html}</div>"
                 self.detail_browser.setHtml(current_html + readme_section)
+
+    def _simple_markdown_to_html(self, text: str) -> str:
+        text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        text = re.sub(r'^### (.+)$', r'<h4>\1</h4>', text, flags=re.MULTILINE)
+        text = re.sub(r'^## (.+)$', r'<h3>\1</h3>', text, flags=re.MULTILINE)
+        text = re.sub(r'^# (.+)$', r'<h2>\1</h2>', text, flags=re.MULTILINE)
+        text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+        text = re.sub(r'\*(.+?)\*', r'<i>\1</i>', text)
+        text = re.sub(r'`([^`]+)`', r'<code style="background:#f0f0f0;padding:2px 4px;border-radius:3px;">\1</code>', text)
+        text = re.sub(r'^\[([^\]]+)\]\(([^)]+)\)$', r'<a href="\2">\1</a>', text, flags=re.MULTILINE)
+        text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2">\1</a>', text)
+        text = re.sub(r'^---$', '<hr>', text, flags=re.MULTILINE)
+        text = re.sub(r'```(\w*)\n(.*?)```', r'<pre style="background:#2d2d2d;color:#f8f8f2;padding:12px;border-radius:6px;overflow-x:auto;font-size:13px;">\2</pre>', text, flags=re.DOTALL)
+        text = re.sub(r'\n\n', '<br><br>', text)
+        text = re.sub(r'\n', '<br>', text)
+        return text
+
+    def _copy_repo_url(self):
+        if self.current_repo:
+            from PyQt5.QtWidgets import QApplication
+            QApplication.clipboard().setText(self.current_repo.html_url)
+            self.copy_url_btn.setText("✅ 已复制")
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(2000, lambda: self.copy_url_btn.setText("📋 复制链接"))
 
     def _do_summarize(self):
         if not self.current_repo:

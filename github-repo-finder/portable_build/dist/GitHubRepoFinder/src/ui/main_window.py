@@ -14,13 +14,14 @@ from .settings_tab import SettingsTab, load_config
 STYLESHEET = """
 QMainWindow {
     background-color: #ffffff;
+    font-size: 14px;
 }
 QTabWidget::pane {
     border: 1px solid #bdc3c7; border-radius: 6px;
     padding: 4px; background-color: #ffffff;
 }
 QTabBar::tab {
-    padding: 10px 20px; font-size: 13px; font-weight: bold;
+    padding: 10px 20px; font-size: 15px; font-weight: bold;
     border: 1px solid #bdc3c7; border-bottom: none;
     border-top-left-radius: 8px; border-top-right-radius: 8px;
     background-color: #ecf0f1; color: #2c3e50;
@@ -86,6 +87,7 @@ class MainWindow(QMainWindow):
 
         self.settings_tab.config_saved.connect(self._on_config_saved)
         self.search_tab.compare_requested.connect(self._on_compare_requested)
+        self.trending_tab.compare_requested.connect(self._on_compare_requested)
         self.history_tab.search_requested = self._on_history_search
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
@@ -98,8 +100,8 @@ class MainWindow(QMainWindow):
         self.search_tab.update_config(config)
         self.trending_tab.update_config(config)
 
-    def _on_compare_requested(self, repos: list):
-        self.compare_tab.add_repos(repos)
+    def _on_compare_requested(self, repos):
+        self.compare_tab.add_repos(list(repos))
         self.tabs.setCurrentWidget(self.compare_tab)
 
     def _on_history_search(self, query: str, sort: str):
