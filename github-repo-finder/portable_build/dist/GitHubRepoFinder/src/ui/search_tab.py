@@ -9,6 +9,8 @@ from ..services.github_service import GitHubService, GitHubServiceError
 from ..services.ai_service import AIService, AIServiceError
 from ..services.export_service import ExportService
 from ..ui.settings_tab import load_config
+from ..ui.favorites_tab import add_to_favorites
+from ..ui.history_tab import add_search_record
 
 
 SORT_OPTIONS = {
@@ -74,6 +76,8 @@ class SummarizeWorker(QThread):
 
 
 class SearchTab(QWidget):
+    compare_requested = pyqtSignal(list)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.repos = []
@@ -249,6 +253,34 @@ class SearchTab(QWidget):
         self.export_btn.clicked.connect(self._do_export)
         action_bar.addWidget(self.export_btn)
 
+        self.fav_btn = QPushButton("⭐ 收藏")
+        self.fav_btn.setEnabled(False)
+        self.fav_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f39c12; color: white;
+                border: none; border-radius: 6px;
+                padding: 8px 14px; font-size: 13px; font-weight: bold;
+            }
+            QPushButton:hover { background-color: #d68910; }
+            QPushButton:disabled { background-color: #95a5a6; }
+        """)
+        self.fav_btn.clicked.connect(self._do_favorite)
+        action_bar.addWidget(self.fav_btn)
+
+        self.compare_btn = QPushButton("📊 对比")
+        self.compare_btn.setEnabled(False)
+        self.compare_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1abc9c; color: white;
+                border: none; border-radius: 6px;
+                padding: 8px 14px; font-size: 13px; font-weight: bold;
+            }
+            QPushButton:hover { background-color: #16a085; }
+            QPushButton:disabled { background-color: #95a5a6; }
+        """)
+        self.compare_btn.clicked.connect(self._do_compare)
+        action_bar.addWidget(self.compare_btn)
+
         action_bar.addStretch()
         detail_layout.addLayout(action_bar)
 
@@ -332,12 +364,18 @@ class SearchTab(QWidget):
         self.search_btn.setEnabled(True)
         self.progress_bar.setVisible(False)
         self.export_btn.setEnabled(len(repos) > 0)
+        self.fav_btn.setEnabled(len(repos) > 0)
+        self.compare_btn.setEnabled(len(repos) >= 2)
 
         if not repos:
             self.detail_header.setText("未找到相关仓库，请尝试其他关键词")
             return
 
         self.detail_header.setText(f"找到 {len(repos)} 个仓库，勾选后可批量总结")
+
+        query = self.search_input.text().strip()
+        sort_key = SORT_OPTIONS[self.sort_combo.currentText()]
+        add_search_record(query, len(repos), sort=sort_key)
 
         for repo in repos:
             item = QListWidgetItem()
@@ -502,3 +540,31 @@ class SearchTab(QWidget):
             QMessageBox.information(self, "导出成功", f"报告已导出到：\n{filepath}")
         except Exception as e:
             QMessageBox.critical(self, "导出失败", str(e))
+
+    def _do_favorite(self):
+        selected = self._get_selected_repos()
+        if not selected:
+            if self.current_repo:
+                selected = [self.current_repo]
+            else:
+                QMessageBox.warning(self, "提示", "请先勾选或选择要收藏的仓库！")
+                return
+        added = 0
+        for repo in selected:
+            if add_to_favorites(repo):
+                added += 1
+        if added > 0:
+            QMessageBox.information(self, "收藏成功", f"已收藏 {added} 个仓库到收藏夹！")
+        else:
+            QMessageBox.information(self, "提示", "这些仓库已在收藏夹中")
+
+    def _do_compare(self):
+        selected = self._get_selected_repos()
+        if len(selected) < 2:
+            QMessageBox.warning(self, "提示", "请至少勾选 2 个仓库进行对比！")
+            return
+        if len(selected) > 5:
+            QMessageBox.warning(self, "提示", "最多同时对比 5 个仓库！")
+            return
+        if self.compare_requested:
+            self.compare_requested(selected)

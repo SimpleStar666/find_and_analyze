@@ -4,6 +4,10 @@ from PyQt5.QtWidgets import QMainWindow, QTabWidget, QWidget, QVBoxLayout, QLabe
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt
 from .search_tab import SearchTab
+from .trending_tab import TrendingTab
+from .compare_tab import CompareTab
+from .favorites_tab import FavoritesTab
+from .history_tab import HistoryTab
 from .settings_tab import SettingsTab, load_config
 
 
@@ -16,7 +20,7 @@ QTabWidget::pane {
     padding: 4px; background-color: #ffffff;
 }
 QTabBar::tab {
-    padding: 10px 24px; font-size: 14px; font-weight: bold;
+    padding: 10px 20px; font-size: 13px; font-weight: bold;
     border: 1px solid #bdc3c7; border-bottom: none;
     border-top-left-radius: 8px; border-top-right-radius: 8px;
     background-color: #ecf0f1; color: #2c3e50;
@@ -65,18 +69,55 @@ class MainWindow(QMainWindow):
 
         self.tabs = QTabWidget()
         self.search_tab = SearchTab()
+        self.trending_tab = TrendingTab()
+        self.compare_tab = CompareTab()
+        self.favorites_tab = FavoritesTab()
+        self.history_tab = HistoryTab()
         self.settings_tab = SettingsTab()
 
         self.tabs.addTab(self.search_tab, "🔍 搜索")
+        self.tabs.addTab(self.trending_tab, "🔥 趋势")
+        self.tabs.addTab(self.compare_tab, "📊 对比")
+        self.tabs.addTab(self.favorites_tab, "⭐ 收藏")
+        self.tabs.addTab(self.history_tab, "📜 历史")
         self.tabs.addTab(self.settings_tab, "⚙ 设置")
 
         layout.addWidget(self.tabs)
 
         self.settings_tab.config_saved.connect(self._on_config_saved)
+        self.search_tab.compare_requested.connect(self._on_compare_requested)
+        self.history_tab.search_requested = self._on_history_search
+        self.tabs.currentChanged.connect(self._on_tab_changed)
 
     def _on_config_saved(self, config: dict):
         self.search_tab.update_config(config)
+        self.trending_tab.update_config(config)
 
     def _apply_config(self):
         config = load_config()
         self.search_tab.update_config(config)
+        self.trending_tab.update_config(config)
+
+    def _on_compare_requested(self, repos: list):
+        self.compare_tab.add_repos(repos)
+        self.tabs.setCurrentWidget(self.compare_tab)
+
+    def _on_history_search(self, query: str, sort: str):
+        self.search_tab.search_input.setText(query)
+        sort_map = {v: k for k, v in {
+            "最佳匹配": "best-match",
+            "最多 Star": "stars",
+            "最多 Fork": "forks",
+            "最近更新": "updated",
+        }.items()}
+        if sort in sort_map:
+            self.search_tab.sort_combo.setCurrentText(sort_map[sort])
+        self.tabs.setCurrentWidget(self.search_tab)
+        self.search_tab._do_search()
+
+    def _on_tab_changed(self, index):
+        widget = self.tabs.widget(index)
+        if widget == self.favorites_tab:
+            self.favorites_tab.refresh()
+        elif widget == self.history_tab:
+            self.history_tab.refresh()
