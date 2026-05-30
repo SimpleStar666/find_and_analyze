@@ -86,8 +86,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.tabs, 1)
 
         self.settings_tab.config_saved.connect(self._on_config_saved)
-        self.search_tab.compare_requested.connect(self._on_compare_requested)
-        self.trending_tab.compare_requested.connect(self._on_compare_requested)
+        self.search_tab.on_compare = self._on_compare_requested
+        self.trending_tab.on_compare = self._on_compare_requested
         self.history_tab.search_requested = self._on_history_search
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
