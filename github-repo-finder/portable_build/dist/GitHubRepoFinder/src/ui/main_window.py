@@ -66,7 +66,7 @@ class MainWindow(QMainWindow):
         header = QLabel("🔍 GitHub Repo Finder")
         header.setStyleSheet("font-size: 22px; font-weight: bold; color: #2c3e50; padding: 4px 0;")
         header.setAlignment(Qt.AlignCenter)
-        layout.addWidget(header)
+        layout.addWidget(header, 0)
 
         self.tabs = QTabWidget()
         self.search_tab = SearchTab()
@@ -83,7 +83,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.history_tab, "📜 历史")
         self.tabs.addTab(self.settings_tab, "⚙ 设置")
 
-        layout.addWidget(self.tabs)
+        layout.addWidget(self.tabs, 1)
 
         self.settings_tab.config_saved.connect(self._on_config_saved)
         self.search_tab.compare_requested.connect(self._on_compare_requested)

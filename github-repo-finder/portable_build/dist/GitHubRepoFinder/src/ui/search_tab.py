@@ -10,8 +10,8 @@ from ..services.github_service import GitHubService, GitHubServiceError
 from ..services.ai_service import AIService, AIServiceError
 from ..services.export_service import ExportService
 from ..ui.settings_tab import load_config
-from ..ui.favorites_tab import add_to_favorites
-from ..ui.history_tab import add_search_record
+from ..services.favorites_service import add_to_favorites
+from ..services.history_service import add_search_record
 
 
 SORT_OPTIONS = {
