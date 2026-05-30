@@ -77,8 +77,6 @@ class SummarizeWorker(QThread):
 
 
 class SearchTab(QWidget):
-    compare_requested = pyqtSignal(list)
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self.repos = []
@@ -86,6 +84,7 @@ class SearchTab(QWidget):
         self.github_service = GitHubService()
         self.ai_service = None
         self.export_service = ExportService()
+        self.on_compare = None
         self._init_ui()
 
     def _init_ui(self):
@@ -606,5 +605,5 @@ class SearchTab(QWidget):
         if len(selected) > 5:
             QMessageBox.warning(self, "提示", "最多同时对比 5 个仓库！")
             return
-        if self.compare_requested:
-            self.compare_requested(selected)
+        if self.on_compare:
+            self.on_compare(selected)
